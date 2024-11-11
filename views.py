@@ -39,6 +39,31 @@ def obter_dados_climaticos(api_key_openweather, api_key_openuv, lat, lon):
 
     return temperatura, precipitacao, umidade, velocidade_vento, radiacao_uv, concentracao_co2
 
+# Função para obter o perímetro da cidade usando a Overpass API
+def obter_perimetro_cidade(lat, lon):
+    overpass_url = "http://overpass-api.de/api/interpreter"
+    overpass_query = f"""
+    [out:json];
+    is_in({lat}, {lon})->.a;
+    area.a[place=city]->.city;
+    (
+      relation(area.city)[boundary=administrative];
+    );
+    out geom;
+    """
+    response = requests.get(overpass_url, params={'data': overpass_query})
+    data = response.json()
+
+    # Extrair as coordenadas do perímetro (caso encontrado)
+    if 'elements' in data and data['elements']:
+        # Pegando o primeiro elemento que representa o perímetro
+        element = data['elements'][0]
+        if 'geometry' in element:
+            perimetro = [[point['lat'], point['lon']] for point in element['geometry']]
+            return perimetro
+
+    return []
+
 # Rota para receber coordenadas e salvar dados no CSV
 @app.route('/coletar_dados', methods=['POST'])
 def coletar_dados():
@@ -49,6 +74,9 @@ def coletar_dados():
     # Obter dados de clima e UV
     temperatura, precipitacao, umidade, velocidade_vento, radiacao_uv, concentracao_co2 = obter_dados_climaticos(api_key_openweather, api_key_openuv, lat, lon)
     
+    # Obter o perímetro da cidade
+    perimetro = obter_perimetro_cidade(lat, lon)
+
     # Salvar em arquivo CSV
     nome_arquivo = 'dados_climaticos.csv'
     with open(nome_arquivo, mode='a', newline='') as file:
@@ -62,7 +90,7 @@ def coletar_dados():
 
         writer.writerow([lat, lon, temperatura, precipitacao, umidade, velocidade_vento, radiacao_uv, concentracao_co2, data_hora_atual])
 
-    # Retornar dados coletados
+    # Retornar dados coletados, incluindo o perímetro da cidade
     return jsonify({
         'latitude': lat,
         'longitude': lon,
@@ -72,7 +100,9 @@ def coletar_dados():
         'velocidade_vento': velocidade_vento,
         'radiacao_uv': radiacao_uv,
         'concentracao_co2': concentracao_co2,
-        'data_hora': data_hora_atual
+        'data_hora': data_hora_atual,
+        'perimetro': perimetro,
+        'cidade': 'Nome da Cidade'  # Aqui você pode ajustar para o nome da cidade, se disponível
     })
 
 if __name__ == "__main__":
